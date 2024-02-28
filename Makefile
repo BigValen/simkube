@@ -1,8 +1,17 @@
 ARTIFACTS ?= sk-ctrl sk-driver sk-tracer
-EXTRA_BUILD_ARTIFACTS ?= skctl
+EXTRA_BUILD_ARTIFACTS ?=  skctl
+
+TARGET=x86_64-unknown-linux-gnu
+PLATFORM=linux/amd64
+ifdef TARGET
+  TARGETOPT=--target $(TARGET)
+endif
+ifdef PLATFORM
+  PLATFORMOPT=--platform $(PLATFORM)
+endif
 
 COVERAGE_DIR=$(BUILD_DIR)/coverage
-CARGO_HOME_ENV=CARGO_HOME=$(BUILD_DIR)/cargo
+CARGO_HOME_ENV=CARGO_HOME=$(BUILD_DIR)/cargo PKG_CONFIG_SYSROOT_DIR=/ 
 
 ifdef IN_CI
 CARGO_TEST_PREFIX=$(CARGO_HOME_ENV) CARGO_INCREMENTAL=0 RUSTFLAGS='-Cinstrument-coverage' LLVM_PROFILE_FILE='$(BUILD_DIR)/coverage/cargo-test-%p-%m.profraw'
@@ -10,7 +19,7 @@ RUST_COVER_TYPE ?= lcov
 DOCKER_ARGS=
 else
 RUST_COVER_TYPE=markdown
-DOCKER_ARGS=-it
+DOCKER_ARGS=-it $(PLATFORMOPT)
 endif
 
 RUST_COVER_FILE=$(COVERAGE_DIR)/rust-coverage.$(RUST_COVER_TYPE)
@@ -26,15 +35,15 @@ RUST_BUILD_IMAGE ?= rust:buster
 # so we have a known location for it.  This is _not_ built in a docker container so that
 # because it's designed to run on the user's machine, so we don't use the custom CARGO_HOME_ENV
 $(EXTRA_BUILD_ARTIFACTS)::
-	cargo build --target-dir=$(BUILD_DIR) --bin=$@ --color=always
+	PKG_CONFIG_SYSROOT_DIR=/ cargo build --target-dir=$(BUILD_DIR) --bin=$@ --color=always
 	cp $(BUILD_DIR)/debug/$@ $(BUILD_DIR)/.
 
 $(ARTIFACTS)::
 	docker run $(DOCKER_ARGS) -u `id -u`:`id -g` -w /build -v `pwd`:/build:ro -v $(BUILD_DIR):/build/.build:rw $(RUST_BUILD_IMAGE) make $@-docker
 
 %-docker:
-	$(CARGO_HOME_ENV) cargo build --target-dir=$(BUILD_DIR) --bin=$* --color=always
-	cp $(BUILD_DIR)/debug/$* $(BUILD_DIR)/.
+	$(CARGO_HOME_ENV) cargo build  $(TARGETOPT) --target-dir=$(BUILD_DIR) --bin=$* --color=always
+	cp $(BUILD_DIR)/$(TARGET)/debug/$* $(BUILD_DIR)/.
 
 lint:
 	cargo +nightly fmt
